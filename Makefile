@@ -372,6 +372,7 @@ IPS4O_DIR=deps/ips4o
 BBHASH_DIR=deps/BBHash
 MIO_DIR=deps/mio
 ATOMIC_QUEUE_DIR=deps/atomic_queue
+GFA_COMPRESSION_DIR=deps/gfa_compression
 
 # Dependencies that go into libvg's archive
 # These go in libvg but come from dependencies
@@ -408,6 +409,7 @@ LIB_DEPS += $(LIB_DIR)/libvgio.a
 LIB_DEPS += $(LIB_DIR)/libhandlegraph.a
 LIB_DEPS += $(LIB_DIR)/libbdsg.a
 LIB_DEPS += $(LIB_DIR)/libxg.a
+LIB_DEPS += $(LIB_DIR)/libgfa_compression_core.a
 ifneq ($(shell uname -s),Darwin)
     # On non-Mac (i.e. Linux), where ELF binaries are used, pull in libdw which
     # backward-cpp will use.
@@ -518,6 +520,7 @@ DEPS += $(INC_DIR)/raptor2/raptor2.h
 DEPS += $(INC_DIR)/BooPHF.h
 DEPS += $(INC_DIR)/mio/mmap.hpp
 DEPS += $(INC_DIR)/atomic_queue.h
+DEPS += $(INC_DIR)/gfa_compression/gfa_parser.hpp
 
 .PHONY: clean clean-tests get-deps deps lint test set-path objs static static-docker docs man .pre-build version
 
@@ -917,6 +920,15 @@ $(INC_DIR)/mio/mmap.hpp: $(MIO_DIR)/include/mio/*
 # It would be better to copy the atomic_queue directory rather than its contents, but to avoid re-writing mmmultimap...
 $(INC_DIR)/atomic_queue.h: $(ATOMIC_QUEUE_DIR)/include/*
 	+cp -r $(ATOMIC_QUEUE_DIR)/include/atomic_queue/* $(CWD)/$(INC_DIR)/
+
+$(INC_DIR)/gfa_compression/gfa_parser.hpp: $(LIB_DIR)/libgfa_compression_core.a
+
+$(LIB_DIR)/libgfa_compression_core.a: $(GFA_COMPRESSION_DIR)/CMakeLists.txt $(wildcard $(GFA_COMPRESSION_DIR)/src/*) $(wildcard $(GFA_COMPRESSION_DIR)/src/gpu/*) $(wildcard $(GFA_COMPRESSION_DIR)/include/*) $(wildcard $(GFA_COMPRESSION_DIR)/include/gpu/*)
+	+rm -f $(CWD)/$(LIB_DIR)/libgfa_compression_core.a
+	+rm -Rf $(CWD)/$(INC_DIR)/gfa_compression
+	+cd $(GFA_COMPRESSION_DIR) && rm -Rf build && mkdir build && cd build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DCMAKE_CXX_FLAGS="-fPIC $(CXXFLAGS) $(CPPFLAGS)" -DBUILD_PYTHON_BINDINGS=OFF -DBUILD_CLI=OFF -DBUILD_BENCHMARKS=OFF -DBUILD_TESTS=OFF .. && $(MAKE) $(FILTER) gfa_compression_core && cp libgfa_compression_core.a $(CWD)/$(LIB_DIR)/
+	+mkdir -p $(CWD)/$(INC_DIR)/gfa_compression
+	+cp -r $(GFA_COMPRESSION_DIR)/include/* $(CWD)/$(INC_DIR)/gfa_compression/
 
 $(INC_DIR)/mmmultiset.hpp: $(MMMULTIMAP_DIR)/src/mmmultiset.hpp $(INC_DIR)/mmmultimap.hpp
 $(INC_DIR)/mmmultimap.hpp: $(MMMULTIMAP_DIR)/src/mmmultimap.hpp $(MMMULTIMAP_DIR)/src/mmmultiset.hpp $(INC_DIR)/mio/mmap.hpp $(INC_DIR)/atomic_queue.h
