@@ -3,6 +3,7 @@
 #include "../utility.hpp"
 #include "xg.hpp"
 #include "../algorithms/gfa_to_handle.hpp"
+#include "../algorithms/gfaz_to_handle.hpp"
 #include "../io/save_handle_graph.hpp"
 #include "../gfa.hpp"
 #include "../gbzgraph.hpp"
@@ -28,7 +29,7 @@ using namespace vg::io;
 //------------------------------------------------------------------------------
 
 // We need a type for describing what kind of input to parse.
-enum input_type { input_handlegraph, input_gam, input_gaf, input_gfa };
+enum input_type { input_handlegraph, input_gam, input_gaf, input_gfa, input_gfaz };
 const input_type INPUT_DEFAULT = input_handlegraph;
 
 // We also need a type for a tri-state for deciding what kind of GFA output algorithm to use.
@@ -96,6 +97,7 @@ int main_convert(int argc, char** argv) {
         {
             {"help", no_argument, 0, 'h'},
             {"gfa-in", no_argument, 0, 'g'},
+            {"gfaz-in", no_argument, 0, 'z'},
             {"in-rgfa-rank", required_argument, 0, 'r'},
             {"ref-sample", required_argument, 0, OPT_REF_SAMPLE},
             {"hap-locus", required_argument, 0, OPT_HAP_LOCUS},
@@ -121,7 +123,7 @@ int main_convert(int argc, char** argv) {
 
         };
         int option_index = 0;
-        c = getopt_long (argc, argv, "h?gr:HvxapfP:Q:BT:WG:F:t:",
+        c = getopt_long (argc, argv, "h?gzr:HvxapfP:Q:BT:WG:F:t:",
                          long_options, &option_index);
 
         // Detect the end of the options.
@@ -138,6 +140,10 @@ int main_convert(int argc, char** argv) {
         case 'g':
             no_multiple_inputs(logger, input);
             input = input_gfa;
+            break;
+        case 'z':
+            no_multiple_inputs(logger, input);
+            input = input_gfaz;
             break;
         case 'r':
             input_rgfa_rank = stol(optarg);
@@ -211,8 +217,8 @@ int main_convert(int argc, char** argv) {
         }
     }
 
-    if (!gfa_trans_path.empty() && input != input_gfa) {
-        logger.error() << "-T can only be used with -g" << endl;
+    if (!gfa_trans_path.empty() && input != input_gfa && input != input_gfaz) {
+        logger.error() << "-T can only be used with -g or -z" << endl;
     }
     if (output_format != "gfa" && (!rgfa_paths.empty() || !rgfa_prefixes.empty() || !wline)) {
         logger.error() << "-P, -Q, and -W can only be used with -f" << endl;
@@ -247,6 +253,14 @@ int main_convert(int argc, char** argv) {
     }
     if (output_format == "vg") {
         logger.warn() << "vg-protobuf output (-v / --vg-out) is deprecated. Please use -p instead" << endl;
+    }
+    
+    // Implicitly treat .gfaz input as GFAZ unless the user selected another input mode.
+    if (input == input_handlegraph && optind < argc) {
+        string input_stream_name = argv[optind];
+        if (input_stream_name != "-" && ends_with(input_stream_name, ".gfaz")) {
+            input = input_gfaz;
+        }
     }
 
     
@@ -300,7 +314,7 @@ int main_convert(int argc, char** argv) {
     unique_ptr<HandleGraph> input_graph;
     unique_ptr<gbwt::GBWT> input_gbwt;
     
-    if (input == input_gfa) {
+    if (input == input_gfa || input == input_gfaz) {
         // we have to check this manually since we're not using the istream-based loading
         // functions in order to be able to use the disk-backed loading algorithm
         if (optind >= argc) {
@@ -312,10 +326,17 @@ int main_convert(int argc, char** argv) {
             
             // Need to go through a handle graph
             bdsg::HashGraph intermediate;
-            logger.warn() << "currently cannot convert GFA directly to XG; "
+            logger.warn() << "currently cannot convert "
+                          << ((input == input_gfa) ? "GFA" : "GFAZ")
+                          << " directly to XG; "
                           << "converting through another format" << endl;
-            vg::algorithms::gfa_to_path_handle_graph(input_stream_name, &intermediate,
-                                                 input_rgfa_rank, gfa_trans_path);
+            if (input == input_gfa) {
+                vg::algorithms::gfa_to_path_handle_graph(input_stream_name, &intermediate,
+                                                     input_rgfa_rank, gfa_trans_path);
+            } else {
+                vg::algorithms::gfaz_to_path_handle_graph(input_stream_name, &intermediate,
+                                                      input_rgfa_rank, gfa_trans_path, nullptr, num_threads);
+            }
             graph_to_xg_adjusting_paths(&intermediate, xg_graph, ref_samples, hap_locus, new_sample, drop_haplotypes);
         }
         else {
@@ -327,19 +348,36 @@ int main_convert(int argc, char** argv) {
                     MutablePathMutableHandleGraph* mutable_output_graph \
                         = dynamic_cast<MutablePathMutableHandleGraph*>(output_path_graph);
                     assert(mutable_output_graph != nullptr);
-                    vg::algorithms::gfa_to_path_handle_graph(input_stream_name, mutable_output_graph,
-                                                         input_rgfa_rank, gfa_trans_path);
+                    if (input == input_gfa) {
+                        vg::algorithms::gfa_to_path_handle_graph(input_stream_name, mutable_output_graph,
+                                                             input_rgfa_rank, gfa_trans_path);
+                    } else {
+                        vg::algorithms::gfaz_to_path_handle_graph(input_stream_name, mutable_output_graph,
+                                                              input_rgfa_rank, gfa_trans_path, nullptr, num_threads);
+                    }
                 }
                 else {
                     MutableHandleGraph* mutable_output_graph = dynamic_cast<MutableHandleGraph*>(output_graph.get());
                     assert(mutable_output_graph != nullptr);
-                    vg::algorithms::gfa_to_handle_graph(input_stream_name, mutable_output_graph,
-                                                    gfa_trans_path);
+                    if (input == input_gfa) {
+                        vg::algorithms::gfa_to_handle_graph(input_stream_name, mutable_output_graph,
+                                                        gfa_trans_path);
+                    } else {
+                        vg::algorithms::gfaz_to_handle_graph(input_stream_name, mutable_output_graph,
+                                                         gfa_trans_path, num_threads);
+                    }
                 }
             } catch (vg::algorithms::GFAFormatError& e) {
-                logger.error() << "Input GFA is not acceptable.\n" << e.what() << endl;
+                logger.error() << "Input " << ((input == input_gfa) ? "GFA" : "GFAZ")
+                               << " is not acceptable.\n" << e.what() << endl;
             } catch (std::ios_base::failure& e) {
-                logger.error() << "IO error processing input GFA.\n" << e.what() << endl;
+                logger.error() << "IO error processing input "
+                               << ((input == input_gfa) ? "GFA" : "GFAZ")
+                               << ".\n" << e.what() << endl;
+            } catch (std::runtime_error& e) {
+                logger.error() << "Error processing input "
+                               << ((input == input_gfa) ? "GFA" : "GFAZ")
+                               << ".\n" << e.what() << endl;
             }
         }
     }
@@ -425,7 +463,7 @@ int main_convert(int argc, char** argv) {
         } else if (gfa_output_algorithm == algorithm_vg) {
             // Use HandleGraph GFA conversion code
             const PathHandleGraph* graph_to_write;
-            if (input == input_gfa) {
+            if (input == input_gfa || input == input_gfaz) {
                 graph_to_write = dynamic_cast<const PathHandleGraph*>(output_graph.get());
             } else {
                 graph_to_write = dynamic_cast<const PathHandleGraph*>(input_graph.get());
@@ -466,6 +504,7 @@ void help_convert(char** argv) {
     cerr << "usage: " << argv[0] << " convert [options] <input-graph>" << endl
          << "input options:" << endl
          << "  -g, --gfa-in               input in GFA format" << endl
+         << "  -z, --gfaz-in              input in GFAZ format" << endl
          << "  -r, --in-rgfa-rank N       import rgfa tags with rank <= N as paths [0]" << endl
          << "      --ref-sample STR       change haplotypes for this sample to" << endl
          << "                             reference paths (may repeat)" << endl
@@ -473,7 +512,7 @@ void help_convert(char** argv) {
          << "                             to haplotype paths (must be used with --new-sample)" << endl
          << "      --new-sample STR       when using --hap-locus, give the new haplotype" << endl
          << "                             this sample name (must be used with --hap-locus)" << endl
-         << "gfa input options (use with -g):" << endl
+         << "gfa input options (use with -g or -z):" << endl
          << "  -T, --gfa-trans FILE       write gfa id conversions to FILE" << endl
          << "output options:" << endl
          << "  -v, --vg-out               output in VG's original Protobuf format" << endl
@@ -512,7 +551,7 @@ void help_convert(char** argv) {
 
 void no_multiple_inputs(const Logger& logger, input_type input) {
     if (input != INPUT_DEFAULT) {
-        logger.error() << "cannot combine input types (GFA, GAM, GAF)" << endl;
+        logger.error() << "cannot combine input types (GFA, GFAZ, GAM, GAF)" << endl;
     }
 }
 
