@@ -1,5 +1,7 @@
 #include "gfa_to_handle.hpp"
+#include "gfaz_to_handle.hpp"
 #include "../path.hpp"
+#include "../utility.hpp"
 
 #include <gbwtgraph/utils.h>
 
@@ -325,7 +327,11 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         GFAIDMapInfo* translation) {
+                         GFAIDMapInfo* translation, int num_threads) {
+    if (filename != "-" && ends_with(filename, ".gfaz")) {
+        gfaz_to_handle_graph(filename, graph, translation, num_threads);
+        return;
+    }
                          
     get_input_file(filename, [&](istream& in) {
        gfa_to_handle_graph(in, graph, translation);
@@ -333,11 +339,11 @@ void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         const string& translation_filename) {
+                         const string& translation_filename, int num_threads) {
 
     
     GFAIDMapInfo id_map_info;
-    gfa_to_handle_graph(filename, graph, &id_map_info);
+    gfa_to_handle_graph(filename, graph, &id_map_info, num_threads);
     write_gfa_translation(id_map_info, translation_filename);
 }
 
@@ -357,19 +363,23 @@ void gfa_to_handle_graph(istream& in, MutableHandleGraph* graph,
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation, int64_t max_rgfa_rank,
-                              unordered_set<PathSense>* ignore_sense) {
+                              unordered_set<PathSense>* ignore_sense, int num_threads) {
+    if (filename != "-" && ends_with(filename, ".gfaz")) {
+        gfaz_to_path_handle_graph(filename, graph, translation, max_rgfa_rank, ignore_sense, num_threads);
+        return;
+    }
     
     get_input_file(filename, [&](istream& in) {
-        gfa_to_path_handle_graph(in, graph, translation, max_rgfa_rank);
+        gfa_to_path_handle_graph(in, graph, translation, max_rgfa_rank, ignore_sense);
     });
 }
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               int64_t max_rgfa_rank, const string& translation_filename,
-                              unordered_set<PathSense>* ignore_sense) {
+                              unordered_set<PathSense>* ignore_sense, int num_threads) {
 
     GFAIDMapInfo id_map_info;
-    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank);
+    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank, ignore_sense, num_threads);
     write_gfa_translation(id_map_info, translation_filename);
 
 }
