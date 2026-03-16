@@ -1,10 +1,35 @@
 #include "gfa_to_handle.hpp"
 #include "../path.hpp"
+#include "../utility.hpp"
 
 #include <gbwtgraph/utils.h>
 
 namespace vg {
 namespace algorithms {
+
+static GFAParser::visit_iteratee_t make_p_visit_iteratee(const GFAParser::chars_t& visits) {
+    return [visits](const GFAParser::visit_step_t& visit_step) {
+        GFAParser::scan_p_visits(visits, [&](int64_t rank, const GFAParser::chars_t& node_name, bool is_reverse) {
+            return visit_step(rank, GFAParser::extract(node_name), is_reverse);
+        });
+    };
+}
+
+static GFAParser::visit_iteratee_t make_w_visit_iteratee(const GFAParser::chars_t& visits) {
+    return [visits](const GFAParser::visit_step_t& visit_step) {
+        GFAParser::scan_w_visits(visits, [&](int64_t rank, const GFAParser::chars_t& node_name, bool is_reverse) {
+            return visit_step(rank, GFAParser::extract(node_name), is_reverse);
+        });
+    };
+}
+
+static GFAParser::overlap_iteratee_t make_p_overlap_iteratee(const GFAParser::chars_t& overlaps) {
+    return [overlaps](const GFAParser::overlap_step_t& overlap_step) {
+        GFAParser::scan_p_overlaps(overlaps, [&](int64_t rank, const GFAParser::chars_t& overlap) {
+            return overlap_step(rank, GFAParser::extract(overlap));
+        });
+    };
+}
 
 void GFAIDMapInfo::invert_translation() {
     if (!numeric_mode) {
@@ -103,8 +128,8 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
     });
 
     parser.path_listeners.push_back([&parser, graph, reference_samples, ignore_sense](const string& name,
-                                                                                      const GFAParser::chars_t& visits,
-                                                                                      const GFAParser::chars_t& overlaps,
+                                                                                      const GFAParser::visit_iteratee_t& visits,
+                                                                                      const GFAParser::overlap_iteratee_t& overlaps,
                                                                                       const GFAParser::tag_list_t& tags) {
         // For P lines, we add the path.
         
@@ -168,16 +193,11 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
                                               phase_block,
                                               subrange);
         
-        // Overlaps are pre-checked in scan_p
-        // TODO: Do it in a better place.
-        
-        GFAParser::scan_p_visits(visits, [&](int64_t step_rank,
-                                             const GFAParser::chars_t& step_name,
-                                             bool step_is_reverse) {
+        visits([&](int64_t step_rank, const string& step_name, bool step_is_reverse) {
             if (step_rank >= 0) {
                 // Not an empty path sentinel.
                 // Find the node ID to visit.
-                nid_t n = GFAParser::find_existing_sequence_id(GFAParser::extract(step_name), parser.id_map());
+                nid_t n = GFAParser::find_existing_sequence_id(step_name, parser.id_map());
                 // And add the step.
                 graph->append_step(path_handle, graph->get_handle(n, step_is_reverse));
             }
@@ -190,7 +210,7 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
                                                                         int64_t haplotype,
                                                                         const string& contig_name,
                                                                         const subrange_t& subrange,
-                                                                        const GFAParser::chars_t& visits,
+                                                                        const GFAParser::visit_iteratee_t& visits,
                                                                         const GFAParser::tag_list_t& tags) {
         // For W lines, we add the path with a bit more metadata.
         
@@ -260,13 +280,11 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
                                               phase_block,
                                               assigned_subrange);
         
-        GFAParser::scan_w_visits(visits, [&](int64_t step_rank,
-                                             const GFAParser::chars_t& step_name,
-                                             bool step_is_reverse) {
+        visits([&](int64_t step_rank, const string& step_name, bool step_is_reverse) {
             if (step_rank >= 0) {
                 // Not an empty path sentinel.
                 // Find the node ID to visit.
-                nid_t n = GFAParser::find_existing_sequence_id(GFAParser::extract(step_name), parser.id_map());
+                nid_t n = GFAParser::find_existing_sequence_id(step_name, parser.id_map());
                 // And add the step.
                 graph->append_step(path_handle, graph->get_handle(n, step_is_reverse));
             }
@@ -325,26 +343,34 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         GFAIDMapInfo* translation) {
-                         
-    get_input_file(filename, [&](istream& in) {
-       gfa_to_handle_graph(in, graph, translation);
-    });
+                         GFAIDMapInfo* translation, int num_threads) {
+    if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
+        GFAzParser parser(num_threads);
+        if (translation) {
+            parser.external_id_map = translation;
+        }
+        parser_to_handle_graph(parser, graph);
+        parser.parse(filename);
+    } else {
+        get_input_file(filename, [&](istream& in) {
+            gfa_to_handle_graph(in, graph, translation);
+        });
+    }
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         const string& translation_filename) {
+                         const string& translation_filename, int num_threads) {
 
     
     GFAIDMapInfo id_map_info;
-    gfa_to_handle_graph(filename, graph, &id_map_info);
+    gfa_to_handle_graph(filename, graph, &id_map_info, num_threads);
     write_gfa_translation(id_map_info, translation_filename);
 }
 
 void gfa_to_handle_graph(istream& in, MutableHandleGraph* graph,
                          GFAIDMapInfo* translation) {
                          
-    GFAParser parser;
+    GFATextParser parser;
     if (translation) {
         // Use the given external translation so the caller can keep it around.
         parser.external_id_map = translation;
@@ -357,19 +383,27 @@ void gfa_to_handle_graph(istream& in, MutableHandleGraph* graph,
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation, int64_t max_rgfa_rank,
-                              unordered_set<PathSense>* ignore_sense) {
-    
-    get_input_file(filename, [&](istream& in) {
-        gfa_to_path_handle_graph(in, graph, translation, max_rgfa_rank);
-    });
+                              unordered_set<PathSense>* ignore_sense, int num_threads) {
+    if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
+        GFAzParser parser(num_threads);
+        if (translation) {
+            parser.external_id_map = translation;
+        }
+        parser_to_path_handle_graph(parser, graph, max_rgfa_rank, ignore_sense);
+        parser.parse(filename);
+    } else {
+        get_input_file(filename, [&](istream& in) {
+            gfa_to_path_handle_graph(in, graph, translation, max_rgfa_rank, ignore_sense);
+        });
+    }
 }
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               int64_t max_rgfa_rank, const string& translation_filename,
-                              unordered_set<PathSense>* ignore_sense) {
+                              unordered_set<PathSense>* ignore_sense, int num_threads) {
 
     GFAIDMapInfo id_map_info;
-    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank);
+    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank, ignore_sense, num_threads);
     write_gfa_translation(id_map_info, translation_filename);
 
 }
@@ -381,7 +415,7 @@ void gfa_to_path_handle_graph(istream& in,
                               unordered_set<PathSense>* ignore_sense) {
     
     // TODO: Deduplicate this setup code with gfa_to_handle_graph more.
-    GFAParser parser;
+    GFATextParser parser;
     if (translation) {
         // Use the given external translation so the caller can keep it around.
         parser.external_id_map = translation;
@@ -393,6 +427,19 @@ void gfa_to_path_handle_graph(istream& in,
     add_path_listeners(parser, graph, ignore_sense);
     
     parser.parse(in);
+}
+
+void parser_to_handle_graph(GFAParser& parser, MutableHandleGraph* graph) {
+    add_graph_listeners(parser, graph);
+}
+
+void parser_to_path_handle_graph(GFAParser& parser,
+                                 MutablePathMutableHandleGraph* graph,
+                                 int64_t max_rgfa_rank,
+                                 unordered_set<PathSense>* ignore_sense) {
+    add_graph_listeners(parser, graph);
+    parser.max_rgfa_rank = max_rgfa_rank;
+    add_path_listeners(parser, graph, ignore_sense);
 }
 
 /// Read a range, stopping before any end character in the given null-terminated string,
@@ -709,6 +756,24 @@ void GFAParser::scan_p_visits(const chars_t& visit_range,
     return GFAParser::scan_visits(visit_range, 'P', visit_step);
 }
 
+void GFAParser::scan_p_overlaps(const chars_t& overlap_range,
+                                function<bool(int64_t rank, const chars_t& overlap)> overlap_step) {
+    auto cursor = overlap_range.first;
+    auto& end = overlap_range.second;
+    int64_t rank = 0;
+    
+    while (cursor != end) {
+        chars_t overlap = take_range_until_optional(cursor, end, ",\t\n", "parsing overlap token");
+        if (!overlap_step(rank, overlap)) {
+            return;
+        }
+        if (cursor != end) {
+            take_character(cursor, end, ',', "parsing overlap separator");
+        }
+        ++rank;
+    }
+}
+
 void GFAParser::scan_w_visits(const chars_t& visit_range,
                               function<bool(int64_t rank, const chars_t& node_name, bool is_reverse)> visit_step) {
     
@@ -853,7 +918,17 @@ nid_t GFAParser::find_existing_sequence_id(const string& str, GFAIDMapInfo& id_m
     return 0;
 }
 
-void GFAParser::parse(istream& in) {
+void GFAParser::parse(const string& filename) {
+    get_input_file(filename, [&](istream& in) {
+        parse(in);
+    });
+}
+
+void GFATextParser::parse(const string& filename) {
+    GFAParser::parse(filename);
+}
+
+void GFATextParser::parse(istream& in) {
     if (!in) {
         throw std::ios_base::failure("error:[GFAParser] Couldn't open input stream");
     }
@@ -1120,7 +1195,7 @@ void GFAParser::parse(istream& in) {
                     auto& visits = get<1>(p_parse);
                     auto& overlaps = get<2>(p_parse);
                     auto& tags = get<3>(p_parse);
-                    
+
                     for(auto it = overlaps.first; it != overlaps.second; ++it) {
                         if (*it != '*' && *it != ',' && *it != 'M' && (*it < '0' || *it > '9')) {
                             // This overlap isn't just * or a list of * or a list of matches with numbers.
@@ -1156,7 +1231,7 @@ void GFAParser::parse(istream& in) {
                     
                     for (auto& listener : this->path_listeners) {
                         // Tell all the listener functions
-                        listener(path_name, visits, overlaps, tags);
+                        listener(path_name, make_p_visit_iteratee(visits), make_p_overlap_iteratee(overlaps), tags);
                     }
                 }
                 break;
@@ -1204,9 +1279,10 @@ void GFAParser::parse(istream& in) {
                         return false;
                     }
                     
+                    auto visit_iteratee = make_w_visit_iteratee(visits);
                     for (auto& listener : this->walk_listeners) {
                         // Tell all the listener functions
-                        listener(sample_name, haplotype, contig_name, subrange, visits, tags);
+                        listener(sample_name, haplotype, contig_name, subrange, visit_iteratee, tags);
                     }
                 }
                 break;

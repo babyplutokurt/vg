@@ -65,6 +65,7 @@
 #include "io/save_handle_graph.hpp"
 
 #include "algorithms/gfa_to_handle.hpp"
+
 #include "algorithms/prune.hpp"
 #include "algorithms/component.hpp"
 #include "algorithms/find_translation.hpp"
@@ -6470,4 +6471,3 @@ const IndexGroup& RewindPlanException::get_indexes() const noexcept {
 }
 
 }
-

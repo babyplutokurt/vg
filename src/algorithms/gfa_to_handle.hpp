@@ -54,39 +54,47 @@ struct GFAIDMapInfo : public NamedNodeBackTranslation {
 
 };
 
-/// Read a GFA file for a blunt-ended graph into a HandleGraph. Give "-" as a filename for stdin.
+/// Read a GFA or GFAZ file for a blunt-ended graph into a HandleGraph.
+/// Give "-" as a filename for stdin.
 ///
-/// Throws GFAFormatError if the GFA file is not acceptable, and
+/// The format is automatically detected: GFAZ files are identified by their
+/// magic number. Throws GFAFormatError if the file is not acceptable, and
 /// std::ios_base::failure if an IO operation fails. Throws invalid_argument if
 /// otherwise misused.
 /// Does not give max ID hints, and so might be very slow when loading into an ODGI graph.
+/// num_threads is used for GFAZ decompression; ignored for plain GFA text input.
 void gfa_to_handle_graph(const string& filename,
                          MutableHandleGraph* graph,
-                         GFAIDMapInfo* translation = nullptr);
+                         GFAIDMapInfo* translation = nullptr,
+                         int num_threads = 0);
 
 /// Overload which serializes its translation to a file internally.
 void gfa_to_handle_graph(const string& filename,
                          MutableHandleGraph* graph,
-                         const string& translation_filename);
+                         const string& translation_filename,
+                         int num_threads = 0);
 
 /// Load a GFA from a stream (assumed not to be seekable or reopenable) into a HandleGraph.
 void gfa_to_handle_graph(istream& in,
                          MutableHandleGraph* graph,
                          GFAIDMapInfo* translation = nullptr);
 
-/// Same as gfa_to_handle_graph but also adds path elements from the GFA to the graph.
+/// Same as gfa_to_handle_graph but also adds path elements from the GFA/GFAZ to the graph.
+/// num_threads is used for GFAZ decompression; ignored for plain GFA text input.
 void gfa_to_path_handle_graph(const string& filename,
                               MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation = nullptr,
                               int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
-                              unordered_set<PathSense>* ignore_sense = nullptr);
+                              unordered_set<PathSense>* ignore_sense = nullptr,
+                              int num_threads = 0);
 
 /// Overload which serializes its translation to a file internally.
 void gfa_to_path_handle_graph(const string& filename,
                               MutablePathMutableHandleGraph* graph,
                               int64_t max_rgfa_rank,
                               const string& translation_filename,
-                              unordered_set<PathSense>* ignore_sense = nullptr);
+                              unordered_set<PathSense>* ignore_sense = nullptr,
+                              int num_threads = 0);
                               
 /// Load a GFA from a stream (assumed not to be seekable or reopenable) into a PathHandleGraph.
 void gfa_to_path_handle_graph(istream& in,
@@ -133,6 +141,13 @@ public:
     // And a type for a collection of GFA tags.
     // This could become a range or list of ranges if we wanted to copy less.
     using tag_list_t = vector<string>;
+    // And a callback shape for iterating path/walk visits without exposing
+    // the source encoding.
+    using visit_step_t = function<bool(int64_t rank, const string& node_name, bool is_reverse)>;
+    using visit_iteratee_t = function<void(const visit_step_t&)>;
+    // And a callback shape for iterating path overlap tokens.
+    using overlap_step_t = function<bool(int64_t rank, const string& overlap)>;
+    using overlap_iteratee_t = function<void(const overlap_step_t&)>;
     
     /**
      * Parse tags out from a possibly empty range to a vector of tag strings.
@@ -174,6 +189,15 @@ public:
      */
     static void scan_p_visits(const chars_t& visit_range,
                               function<bool(int64_t rank, const chars_t& node_name, bool is_reverse)> visit_step);
+    
+    /**
+     * Scan overlap tokens extracted from a P line.
+     * Calls a callback with all overlap fields.
+     * overlap_step takes {rank, overlap token} and returns true if it wants to
+     * keep iterating (false means stop).
+     */
+    static void scan_p_overlaps(const chars_t& overlap_range,
+                                function<bool(int64_t rank, const chars_t& overlap)> overlap_step);
                               
     /**
      * Scan visits extracted from a W line.
@@ -241,7 +265,7 @@ public:
     GFAIDMapInfo* external_id_map = nullptr;
     
     /// Get the ID map we should be using for parsing.
-    inline GFAIDMapInfo& id_map();
+    GFAIDMapInfo& id_map();
     
     /// These listeners are called for the header line(s), if any.
     vector<std::function<void(const tag_list_t& tags)>> header_listeners;
@@ -255,11 +279,11 @@ public:
     /// These listeners will be called with information for all P line paths,
     /// after the listeners for all involved nodes, and for the first header if any.
     /// Listeners are not protected from duplicate path names.
-    vector<std::function<void(const string& name, const chars_t& visits, const chars_t& overlaps, const tag_list_t& tags)>> path_listeners;
+    vector<std::function<void(const string& name, const visit_iteratee_t& visits, const overlap_iteratee_t& overlaps, const tag_list_t& tags)>> path_listeners;
     /// These listeners will be called with information for all W line paths,
     /// after the listeners for all involved nodes, and for the first header if any.
     /// Listeners are not protected from duplicate path metadata.
-    vector<std::function<void(const string& sample_name, int64_t haplotype, const string& contig_name, const pair<int64_t, int64_t>& subrange, const chars_t& visits, const tag_list_t& tags)>> walk_listeners;
+    vector<std::function<void(const string& sample_name, int64_t haplotype, const string& contig_name, const pair<int64_t, int64_t>& subrange, const visit_iteratee_t& visits, const tag_list_t& tags)>> walk_listeners;
     /// These listeners will be called with each visit of an rGFA path to a
     /// node, after the node listeners for the involved node, but in an
     /// unspecified order with respect to listeners for headers. They will be
@@ -281,8 +305,48 @@ public:
     /**
      * Parse GFA from the given stream.
      */
-    void parse(istream& in);
+    virtual void parse(istream& in) = 0;
     
+    /**
+     * Parse GFA from the given filename.
+     * The default implementation opens the file as a text GFA stream and calls
+     * the stream parser.
+     */
+    virtual void parse(const string& filename);
+    
+    virtual ~GFAParser() = default;
+    
+};
+
+/// Drive the shared node/edge import logic from an already-configured parser.
+void parser_to_handle_graph(GFAParser& parser,
+                            MutableHandleGraph* graph);
+
+/// Drive the shared node/edge/path import logic from an already-configured parser.
+void parser_to_path_handle_graph(GFAParser& parser,
+                                 MutablePathMutableHandleGraph* graph,
+                                 int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
+                                 unordered_set<PathSense>* ignore_sense = nullptr);
+
+/// Text GFA parser implementation.
+class GFATextParser : public GFAParser {
+public:
+    void parse(istream& in) override;
+    void parse(const string& filename) override;
+};
+
+/// GFAZ parser implementation that emits the same listener events.
+class GFAzParser : public GFAParser {
+public:
+    explicit GFAzParser(int num_threads = 0) : num_threads(num_threads) {}
+    void parse(istream& in) override;
+    void parse(const string& filename) override;
+
+    /// Return true if the named file begins with the GFAZ magic number.
+    /// Returns false for stdin ("-") or empty filenames.
+    static bool looks_like_gfaz(const string& filename);
+private:
+    int num_threads = 0;
 };
 
 /// This exception will be thrown if the GFA data is not acceptable.
