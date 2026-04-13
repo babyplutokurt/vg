@@ -2,8 +2,8 @@
 
 #include "../path.hpp"
 
-#include <GFAz/decompression_workflow.hpp>
-#include <GFAz/serialization.hpp>
+#include <GFAz/workflows/decompression_workflow.hpp>
+#include <GFAz/codec/serialization.hpp>
 
 #include <gbwtgraph/utils.h>
 
