@@ -520,7 +520,7 @@ DEPS += $(INC_DIR)/raptor2/raptor2.h
 DEPS += $(INC_DIR)/BooPHF.h
 DEPS += $(INC_DIR)/mio/mmap.hpp
 DEPS += $(INC_DIR)/atomic_queue.h
-DEPS += $(INC_DIR)/GFAz/io/gfa_parser.hpp
+
 
 .PHONY: clean clean-tests get-deps deps lint test set-path objs static static-docker docs man .pre-build version
 
@@ -921,7 +921,7 @@ $(INC_DIR)/mio/mmap.hpp: $(MIO_DIR)/include/mio/*
 $(INC_DIR)/atomic_queue.h: $(ATOMIC_QUEUE_DIR)/include/*
 	+cp -r $(ATOMIC_QUEUE_DIR)/include/atomic_queue/* $(CWD)/$(INC_DIR)/
 
-$(INC_DIR)/GFAz/gfa_parser.hpp: $(LIB_DIR)/libgfa_compression_core.a
+
 
 $(LIB_DIR)/libgfa_compression_core.a: $(GFAz_DIR)/CMakeLists.txt $(wildcard $(GFAz_DIR)/src/*) $(wildcard $(GFAz_DIR)/src/gpu/*) $(wildcard $(GFAz_DIR)/include/*) $(wildcard $(GFAz_DIR)/include/gpu/*)
 	+rm -f $(CWD)/$(LIB_DIR)/libgfa_compression_core.a
