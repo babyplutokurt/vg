@@ -317,7 +317,7 @@ int main_convert(int argc, char** argv) {
                           << "converting through another format" << endl;
             vg::algorithms::gfa_to_path_handle_graph(input_stream_name, &intermediate,
                                                      input_rgfa_rank, gfa_trans_path,
-                                                     nullptr, num_threads);
+                                                     nullptr);
             graph_to_xg_adjusting_paths(&intermediate, xg_graph, ref_samples, hap_locus, new_sample, drop_haplotypes);
         }
         else {
@@ -331,13 +331,13 @@ int main_convert(int argc, char** argv) {
                     assert(mutable_output_graph != nullptr);
                     vg::algorithms::gfa_to_path_handle_graph(input_stream_name, mutable_output_graph,
                                                              input_rgfa_rank, gfa_trans_path,
-                                                             nullptr, num_threads);
+                                                             nullptr);
                 }
                 else {
                     MutableHandleGraph* mutable_output_graph = dynamic_cast<MutableHandleGraph*>(output_graph.get());
                     assert(mutable_output_graph != nullptr);
                     vg::algorithms::gfa_to_handle_graph(input_stream_name, mutable_output_graph,
-                                                        gfa_trans_path, num_threads);
+                                                        gfa_trans_path);
                 }
             } catch (vg::algorithms::GFAFormatError& e) {
                 logger.error() << "Input GFA is not acceptable.\n" << e.what() << endl;

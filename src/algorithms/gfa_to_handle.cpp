@@ -343,9 +343,9 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         GFAIDMapInfo* translation, int num_threads) {
+                         GFAIDMapInfo* translation) {
     if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
-        GFAzParser parser(num_threads);
+        GFAzParser parser;
         if (translation) {
             parser.external_id_map = translation;
         }
@@ -359,11 +359,11 @@ void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
-                         const string& translation_filename, int num_threads) {
+                         const string& translation_filename) {
 
     
     GFAIDMapInfo id_map_info;
-    gfa_to_handle_graph(filename, graph, &id_map_info, num_threads);
+    gfa_to_handle_graph(filename, graph, &id_map_info);
     write_gfa_translation(id_map_info, translation_filename);
 }
 
@@ -383,9 +383,9 @@ void gfa_to_handle_graph(istream& in, MutableHandleGraph* graph,
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation, int64_t max_rgfa_rank,
-                              unordered_set<PathSense>* ignore_sense, int num_threads) {
+                              unordered_set<PathSense>* ignore_sense) {
     if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
-        GFAzParser parser(num_threads);
+        GFAzParser parser;
         if (translation) {
             parser.external_id_map = translation;
         }
@@ -400,10 +400,10 @@ void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGr
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               int64_t max_rgfa_rank, const string& translation_filename,
-                              unordered_set<PathSense>* ignore_sense, int num_threads) {
+                              unordered_set<PathSense>* ignore_sense) {
 
     GFAIDMapInfo id_map_info;
-    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank, ignore_sense, num_threads);
+    gfa_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank, ignore_sense);
     write_gfa_translation(id_map_info, translation_filename);
 
 }

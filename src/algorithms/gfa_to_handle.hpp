@@ -62,17 +62,14 @@ struct GFAIDMapInfo : public NamedNodeBackTranslation {
 /// std::ios_base::failure if an IO operation fails. Throws invalid_argument if
 /// otherwise misused.
 /// Does not give max ID hints, and so might be very slow when loading into an ODGI graph.
-/// num_threads is used for GFAZ decompression; ignored for plain GFA text input.
 void gfa_to_handle_graph(const string& filename,
                          MutableHandleGraph* graph,
-                         GFAIDMapInfo* translation = nullptr,
-                         int num_threads = 0);
+                         GFAIDMapInfo* translation = nullptr);
 
 /// Overload which serializes its translation to a file internally.
 void gfa_to_handle_graph(const string& filename,
                          MutableHandleGraph* graph,
-                         const string& translation_filename,
-                         int num_threads = 0);
+                         const string& translation_filename);
 
 /// Load a GFA from a stream (assumed not to be seekable or reopenable) into a HandleGraph.
 void gfa_to_handle_graph(istream& in,
@@ -80,21 +77,18 @@ void gfa_to_handle_graph(istream& in,
                          GFAIDMapInfo* translation = nullptr);
 
 /// Same as gfa_to_handle_graph but also adds path elements from the GFA/GFAZ to the graph.
-/// num_threads is used for GFAZ decompression; ignored for plain GFA text input.
 void gfa_to_path_handle_graph(const string& filename,
                               MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation = nullptr,
                               int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
-                              unordered_set<PathSense>* ignore_sense = nullptr,
-                              int num_threads = 0);
+                              unordered_set<PathSense>* ignore_sense = nullptr);
 
 /// Overload which serializes its translation to a file internally.
 void gfa_to_path_handle_graph(const string& filename,
                               MutablePathMutableHandleGraph* graph,
                               int64_t max_rgfa_rank,
                               const string& translation_filename,
-                              unordered_set<PathSense>* ignore_sense = nullptr,
-                              int num_threads = 0);
+                              unordered_set<PathSense>* ignore_sense = nullptr);
                               
 /// Load a GFA from a stream (assumed not to be seekable or reopenable) into a PathHandleGraph.
 void gfa_to_path_handle_graph(istream& in,
@@ -338,7 +332,7 @@ public:
 /// GFAZ parser implementation that emits the same listener events.
 class GFAzParser : public GFAParser {
 public:
-    explicit GFAzParser(int num_threads = 0) : num_threads(num_threads) {}
+    explicit GFAzParser(int num_threads = -1) : num_threads(num_threads) {}
     void parse(istream& in) override;
     void parse(const string& filename) override;
 
