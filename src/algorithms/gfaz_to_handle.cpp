@@ -1,12 +1,15 @@
 #include "gfaz_to_handle.hpp"
 
 #include "../path.hpp"
+#include "../utility.hpp"
+#include <vg/io/fdstream.hpp>
 
 #include <GFAz/codec/codec.hpp>
 #include <GFAz/codec/serialization.hpp>
 #include <GFAz/io/gfa_write_utils.hpp>
 
 #include <algorithm>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <tuple>
@@ -46,17 +49,31 @@ struct StreamingGFAZPaths {
   uint32_t min_rule_id = 0;
 };
 
-bool filename_looks_like_gfaz(const string& filename) {
-  if (filename.empty() || filename == "-") {
-    return false;
-  }
-  ifstream in(filename, ios::binary);
+bool stream_looks_like_gfaz(istream& in) {
   if (!in) {
     return false;
   }
+  const size_t to_sniff = sizeof(uint32_t);
+  char buffer[to_sniff];
+  size_t buffer_used = 0;
+  while (in.peek() != EOF && buffer_used < to_sniff) {
+    buffer[buffer_used++] = static_cast<char>(in.get());
+  }
+  for (size_t i = 0; i < buffer_used; ++i) {
+    in.unget();
+    if (!in) {
+      throw runtime_error("Ungetting failed after " + to_string(i) + " characters");
+    }
+  }
+  if (!in) {
+    in.clear();
+  }
+  if (buffer_used < to_sniff) {
+    return false;
+  }
   uint32_t magic = 0;
-  in.read(reinterpret_cast<char*>(&magic), sizeof(magic));
-  return in.gcount() == sizeof(magic) && magic == GFAZ_MAGIC;
+  memcpy(&magic, buffer, sizeof(uint32_t));
+  return magic == GFAZ_MAGIC;
 }
 
 static CompressedData load_gfaz_compressed(const string &filename) {
@@ -64,6 +81,16 @@ static CompressedData load_gfaz_compressed(const string &filename) {
     throw invalid_argument("GFAZ input from stdin (-) is not supported");
   }
   return deserialize_compressed_data(filename);
+}
+
+static void with_putback_stream(istream& in, const function<void(istream&)>& callback) {
+  istream* from_ptr = &in;
+  unique_ptr<vg::io::streamistream> wrapper;
+  if (&in == &cin) {
+    wrapper = make_unique<vg::io::streamistream>(in);
+    from_ptr = wrapper.get();
+  }
+  callback(*from_ptr);
 }
 
 static void write_gfaz_translation(const GFAIDMapInfo &id_map_info,
@@ -502,6 +529,54 @@ void gfaz_to_handle_graph(const string &filename, MutableHandleGraph *graph,
   parser.parse(filename);
 }
 
+void gfa_or_gfaz_to_handle_graph(const string& filename,
+                                 MutableHandleGraph* graph,
+                                 GFAIDMapInfo* translation,
+                                 int num_threads) {
+  if (filename != "-") {
+    bool is_gfaz = false;
+    get_input_file(filename, [&](istream& in) {
+      with_putback_stream(in, [&](istream& from) {
+        is_gfaz = stream_looks_like_gfaz(from);
+      });
+    });
+    if (is_gfaz) {
+      gfaz_to_handle_graph(filename, graph, translation, num_threads);
+    } else {
+      gfa_to_handle_graph(filename, graph, translation, num_threads);
+    }
+  } else {
+    get_input_file(filename, [&](istream& in) {
+      with_putback_stream(in, [&](istream& from) {
+        if (stream_looks_like_gfaz(from)) {
+          string temp_name = temp_file::create("gfaz-stdin");
+          ofstream temp_stream(temp_name, ios::binary);
+          temp_stream << from.rdbuf();
+          temp_stream.close();
+          try {
+            gfaz_to_handle_graph(temp_name, graph, translation, num_threads);
+          } catch (...) {
+            unlink(temp_name.c_str());
+            throw;
+          }
+          unlink(temp_name.c_str());
+        } else {
+          gfa_to_handle_graph(from, graph, translation);
+        }
+      });
+    });
+  }
+}
+
+void gfa_or_gfaz_to_handle_graph(const string& filename,
+                                 MutableHandleGraph* graph,
+                                 const string& translation_filename,
+                                 int num_threads) {
+  GFAIDMapInfo id_map_info;
+  gfa_or_gfaz_to_handle_graph(filename, graph, &id_map_info, num_threads);
+  write_gfaz_translation(id_map_info, translation_filename);
+}
+
 void gfaz_to_handle_graph(const string &filename, MutableHandleGraph *graph,
                           const string &translation_filename, int num_threads) {
   GFAIDMapInfo id_map_info;
@@ -520,6 +595,59 @@ void gfaz_to_path_handle_graph(const string &filename,
   }
   parser_to_path_handle_graph(parser, graph, max_rgfa_rank, ignore_sense);
   parser.parse(filename);
+}
+
+void gfa_or_gfaz_to_path_handle_graph(const string& filename,
+                                      MutablePathMutableHandleGraph* graph,
+                                      GFAIDMapInfo* translation,
+                                      int64_t max_rgfa_rank,
+                                      unordered_set<PathSense>* ignore_sense,
+                                      int num_threads) {
+  if (filename != "-") {
+    bool is_gfaz = false;
+    get_input_file(filename, [&](istream& in) {
+      with_putback_stream(in, [&](istream& from) {
+        is_gfaz = stream_looks_like_gfaz(from);
+      });
+    });
+    if (is_gfaz) {
+      gfaz_to_path_handle_graph(filename, graph, translation, max_rgfa_rank, ignore_sense, num_threads);
+    } else {
+      gfa_to_path_handle_graph(filename, graph, translation, max_rgfa_rank, ignore_sense, num_threads);
+    }
+  } else {
+    get_input_file(filename, [&](istream& in) {
+      with_putback_stream(in, [&](istream& from) {
+        if (stream_looks_like_gfaz(from)) {
+          string temp_name = temp_file::create("gfaz-stdin");
+          ofstream temp_stream(temp_name, ios::binary);
+          temp_stream << from.rdbuf();
+          temp_stream.close();
+          try {
+            gfaz_to_path_handle_graph(temp_name, graph, translation, max_rgfa_rank, ignore_sense, num_threads);
+          } catch (...) {
+            unlink(temp_name.c_str());
+            throw;
+          }
+          unlink(temp_name.c_str());
+        } else {
+          gfa_to_path_handle_graph(from, graph, translation, max_rgfa_rank, ignore_sense);
+        }
+      });
+    });
+  }
+}
+
+void gfa_or_gfaz_to_path_handle_graph(const string& filename,
+                                      MutablePathMutableHandleGraph* graph,
+                                      int64_t max_rgfa_rank,
+                                      const string& translation_filename,
+                                      unordered_set<PathSense>* ignore_sense,
+                                      int num_threads) {
+  GFAIDMapInfo id_map_info;
+  gfa_or_gfaz_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank,
+                                   ignore_sense, num_threads);
+  write_gfaz_translation(id_map_info, translation_filename);
 }
 
 void gfaz_to_path_handle_graph(const string &filename,

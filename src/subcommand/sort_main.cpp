@@ -139,11 +139,7 @@ int main_sort(int argc, char *argv[]) {
         // Read as GFA
         graph.reset(new VG());
         try {
-            if (algorithms::filename_looks_like_gfaz(filename)) {
-                algorithms::gfaz_to_path_handle_graph(filename, graph.get());
-            } else {
-                algorithms::gfa_to_path_handle_graph(filename, graph.get());
-            }
+            algorithms::gfa_or_gfaz_to_path_handle_graph(filename, graph.get());
         } catch(algorithms::GFAFormatError& e) {
             // GFA loading has failed because the file is invalid
             logger.error() << e.what() << endl;

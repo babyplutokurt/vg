@@ -1927,11 +1927,7 @@ IndexRegistry VGIndexes::get_vg_index_registry() {
             // TODO: this could be fragile if we repurpose this lambda for Reference GFA w/ Haplotypes
             // if we're constructing from a reference GFA, we don't need anything from W lines
             unordered_set<PathSense> ignore{PathSense::HAPLOTYPE};
-            if (algorithms::filename_looks_like_gfaz(input_filename)) {
-                algorithms::gfaz_to_path_handle_graph(input_filename, graph.get(), numeric_limits<int64_t>::max(), translation_name, &ignore);
-            } else {
-                algorithms::gfa_to_path_handle_graph(input_filename, graph.get(), numeric_limits<int64_t>::max(), translation_name, &ignore);
-            }
+            algorithms::gfa_or_gfaz_to_path_handle_graph(input_filename, graph.get(), numeric_limits<int64_t>::max(), translation_name, &ignore);
         }
         catch (algorithms::GFAFormatError& e) {
             error(context) << "GFA file " << input_filename << " is not usable in VG.\n" << e.what() << endl;

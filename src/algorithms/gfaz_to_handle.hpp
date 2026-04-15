@@ -13,8 +13,35 @@ namespace vg {
 namespace algorithms {
 using namespace std;
 
-/// Return true if the given file has the GFAZ magic number.
-bool filename_looks_like_gfaz(const string& filename);
+/// Return true if the given stream begins with the GFAZ magic number.
+bool stream_looks_like_gfaz(istream& in);
+
+/// Read either a GFA or GFAZ file into a HandleGraph by sniffing the input.
+void gfa_or_gfaz_to_handle_graph(const string& filename,
+                                 MutableHandleGraph* graph,
+                                 GFAIDMapInfo* translation = nullptr,
+                                 int num_threads = 0);
+
+/// Overload which serializes its translation to a file internally.
+void gfa_or_gfaz_to_handle_graph(const string& filename,
+                                 MutableHandleGraph* graph,
+                                 const string& translation_filename,
+                                 int num_threads = 0);
+
+/// Read either a GFA or GFAZ file into a PathHandleGraph by sniffing the input.
+void gfa_or_gfaz_to_path_handle_graph(
+    const string& filename, MutablePathMutableHandleGraph* graph,
+    GFAIDMapInfo* translation = nullptr,
+    int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
+    unordered_set<PathSense>* ignore_sense = nullptr, int num_threads = 0);
+
+/// Overload which serializes its translation to a file internally.
+void gfa_or_gfaz_to_path_handle_graph(const string& filename,
+                                      MutablePathMutableHandleGraph* graph,
+                                      int64_t max_rgfa_rank,
+                                      const string& translation_filename,
+                                      unordered_set<PathSense>* ignore_sense = nullptr,
+                                      int num_threads = 0);
 
 /// Read a GFAZ file into a HandleGraph.
 void gfaz_to_handle_graph(const string &filename, MutableHandleGraph *graph,

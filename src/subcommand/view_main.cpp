@@ -566,17 +566,10 @@ int main_view(int argc, char** argv) {
        
         try {
             // Use the disk-backed GFA loader that `vg convert` also uses.
-            if (vg::algorithms::filename_looks_like_gfaz(file_name)) {
-                vg::algorithms::gfaz_to_path_handle_graph(file_name,
-                                                          dynamic_cast<MutablePathMutableHandleGraph*>(graph.get()),
-                                                          nullptr,
-                                                          0); // set rgfa path rank to 0 to be consistent with vg convert's default logic
-            } else {
-                vg::algorithms::gfa_to_path_handle_graph(file_name,
-                                                         dynamic_cast<MutablePathMutableHandleGraph*>(graph.get()),
-                                                         nullptr,
-                                                         0); // set rgfa path rank to 0 to be consistent with vg convert's default logic
-            }
+            vg::algorithms::gfa_or_gfaz_to_path_handle_graph(file_name,
+                                                             dynamic_cast<MutablePathMutableHandleGraph*>(graph.get()),
+                                                             nullptr,
+                                                             0); // set rgfa path rank to 0 to be consistent with vg convert's default logic
         } catch (vg::algorithms::GFAFormatError& e) {
             logger.error() << "Input GFA is not acceptable\n" << e.what() << endl;
         } catch (std::ios_base::failure& e) {
