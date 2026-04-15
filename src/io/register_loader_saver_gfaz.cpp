@@ -50,7 +50,7 @@ static bool sniff_gfaz(istream& stream) {
     }
     uint32_t magic = 0;
     memcpy(&magic, buffer, sizeof(uint32_t));
-    return magic == GFAZ_MAGIC;
+    return magic == gfaz::GFAZ_MAGIC;
 }
 
 void register_loader_saver_gfaz() {

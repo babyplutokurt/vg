@@ -14,11 +14,18 @@
 
 namespace vg {
 namespace algorithms {
-using gfz::gfa_write_utils::SequenceOffsets;
-using gfz::gfa_write_utils::build_offsets;
-using gfz::gfa_write_utils::decode_rules;
-using gfz::gfa_write_utils::decompress_optional_column;
-using gfz::gfa_write_utils::decompress_string_column;
+using gfaz::gfa_write_utils::SequenceOffsets;
+using gfaz::gfa_write_utils::build_offsets;
+using gfaz::gfa_write_utils::decode_rules;
+using gfaz::gfa_write_utils::decompress_optional_column;
+using gfaz::gfa_write_utils::decompress_string_column;
+using gfaz::CompressedData;
+using gfaz::LinkData;
+using gfaz::NodeId;
+using gfaz::OptionalFieldColumn;
+using gfaz::GFAZ_MAGIC;
+using gfaz::deserialize_compressed_data;
+namespace Codec = gfaz::Codec;
 
 struct StreamingGFAZPaths {
   string header_line;
