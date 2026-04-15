@@ -13,6 +13,9 @@ namespace vg {
 namespace algorithms {
 using namespace std;
 
+/// Return true if the given file has the GFAZ magic number.
+bool filename_looks_like_gfaz(const string& filename);
+
 /// Read a GFAZ file into a HandleGraph.
 void gfaz_to_handle_graph(const string &filename, MutableHandleGraph *graph,
                           GFAIDMapInfo *translation = nullptr,
