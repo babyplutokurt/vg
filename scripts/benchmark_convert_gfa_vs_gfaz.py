@@ -63,7 +63,7 @@ def run_one(
     if mode == "gfa":
         mode_flag = "-g"
     elif mode == "gfaz":
-        mode_flag = "-z"
+        mode_flag = "-g"
     else:
         raise ValueError(f"Unsupported mode: {mode}")
 

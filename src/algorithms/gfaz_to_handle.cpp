@@ -89,12 +89,12 @@ static void write_gfaz_translation(const GFAIDMapInfo &id_map_info,
 }
 
 static inline size_t segment_count(const GfaGraph &gfaz_graph) {
-  if (!gfaz_graph.node_id_to_name.empty()) {
-    return gfaz_graph.node_id_to_name.size() - 1;
+  if (!gfaz_graph.segments.node_id_to_name.empty()) {
+    return gfaz_graph.segments.node_id_to_name.size() - 1;
   }
-  return gfaz_graph.node_sequences.empty()
+  return gfaz_graph.segments.node_sequences.empty()
              ? 0
-             : gfaz_graph.node_sequences.size() - 1;
+             : gfaz_graph.segments.node_sequences.size() - 1;
 }
 
 static inline bool valid_segment_id(size_t segment_count, nid_t id) {
@@ -142,9 +142,10 @@ static void set_numeric_translation(size_t segment_count,
 static void add_node_elements(const GfaGraph &gfaz_graph,
                               MutableHandleGraph *graph) {
   // Nodes are 1-based in GFAZ decompression output.
-  for (nid_t id = 1; static_cast<size_t>(id) < gfaz_graph.node_sequences.size();
+  for (nid_t id = 1;
+       static_cast<size_t>(id) < gfaz_graph.segments.node_sequences.size();
        ++id) {
-    graph->create_handle(gfaz_graph.node_sequences[id], id);
+    graph->create_handle(gfaz_graph.segments.node_sequences[id], id);
   }
 }
 
@@ -254,9 +255,9 @@ static void release_links(GfaGraph &gfaz_graph) {
 }
 
 static void release_paths(GfaGraph &gfaz_graph) {
-  release_vector(gfaz_graph.paths);
-  release_vector(gfaz_graph.path_names);
-  release_vector(gfaz_graph.path_overlaps);
+  release_vector(gfaz_graph.paths_data.traversals);
+  release_vector(gfaz_graph.paths_data.names);
+  release_vector(gfaz_graph.paths_data.overlaps);
 }
 
 static void release_walks(GfaGraph &gfaz_graph) {
@@ -269,13 +270,13 @@ static void release_walks(GfaGraph &gfaz_graph) {
 }
 
 static void release_segment_sequences(GfaGraph &gfaz_graph) {
-  release_vector(gfaz_graph.node_sequences);
+  release_vector(gfaz_graph.segments.node_sequences);
 }
 
 static void release_segment_metadata(GfaGraph &gfaz_graph) {
-  release_vector(gfaz_graph.segment_optional_fields);
+  release_vector(gfaz_graph.segments.optional_fields);
   release_node_name_map(gfaz_graph.node_name_to_id);
-  release_vector(gfaz_graph.node_id_to_name);
+  release_vector(gfaz_graph.segments.node_id_to_name);
   release_string(gfaz_graph.header_line);
 }
 
