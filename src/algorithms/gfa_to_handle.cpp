@@ -7,6 +7,23 @@
 namespace vg {
 namespace algorithms {
 
+void gfaz_to_handle_graph(const string& filename,
+                          MutableHandleGraph* graph,
+                          GFAIDMapInfo* translation);
+void gfaz_to_handle_graph(const string& filename,
+                          MutableHandleGraph* graph,
+                          const string& translation_filename);
+void gfaz_to_path_handle_graph(const string& filename,
+                               MutablePathMutableHandleGraph* graph,
+                               GFAIDMapInfo* translation,
+                               int64_t max_rgfa_rank,
+                               unordered_set<PathSense>* ignore_sense);
+void gfaz_to_path_handle_graph(const string& filename,
+                               MutablePathMutableHandleGraph* graph,
+                               int64_t max_rgfa_rank,
+                               const string& translation_filename,
+                               unordered_set<PathSense>* ignore_sense);
+
 static GFAParser::visit_iteratee_t make_p_visit_iteratee(const GFAParser::chars_t& visits) {
     return [visits](const GFAParser::visit_step_t& visit_step) {
         GFAParser::scan_p_visits(visits, [&](int64_t rank, const GFAParser::chars_t& node_name, bool is_reverse) {
@@ -345,12 +362,7 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
                          GFAIDMapInfo* translation) {
     if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
-        GFAzParser parser;
-        if (translation) {
-            parser.external_id_map = translation;
-        }
-        parser_to_handle_graph(parser, graph);
-        parser.parse(filename);
+        gfaz_to_handle_graph(filename, graph, translation);
     } else {
         get_input_file(filename, [&](istream& in) {
             gfa_to_handle_graph(in, graph, translation);
@@ -385,12 +397,7 @@ void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGr
                               GFAIDMapInfo* translation, int64_t max_rgfa_rank,
                               unordered_set<PathSense>* ignore_sense) {
     if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
-        GFAzParser parser;
-        if (translation) {
-            parser.external_id_map = translation;
-        }
-        parser_to_path_handle_graph(parser, graph, max_rgfa_rank, ignore_sense);
-        parser.parse(filename);
+        gfaz_to_path_handle_graph(filename, graph, translation, max_rgfa_rank, ignore_sense);
     } else {
         get_input_file(filename, [&](istream& in) {
             gfa_to_path_handle_graph(in, graph, translation, max_rgfa_rank, ignore_sense);
