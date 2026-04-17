@@ -134,4 +134,3 @@ void register_loader_saver_gfa() {
 }
 
 }
-

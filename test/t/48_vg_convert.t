@@ -388,9 +388,9 @@ is $? 0 "GFAZ conversion preserves path sequences from equivalent GFA input"
 
 vg convert tiny.gfaz.input.pg -f | sort > tiny.gfaz.roundtrip.gfa
 
-vg convert -g tiny/tiny.gfaz -p -t 1 | vg convert -f - | sort > tiny.gfaz.roundtrip.auto.gfa
+vg convert tiny/tiny.gfaz -p -t 1 | vg convert -f - | sort > tiny.gfaz.roundtrip.auto.gfa
 diff tiny.gfaz.roundtrip.gfa tiny.gfaz.roundtrip.auto.gfa
-is $? 0 "GFAZ input is auto-detected from .gfaz extension"
+is $? 0 "GFAZ input is auto-detected through the registry loader"
 
 vg convert -g tiny/tiny.gfaz -p -t 4 | vg convert -f - | sort > tiny.gfaz.roundtrip.mt.gfa
 diff tiny.gfaz.roundtrip.gfa tiny.gfaz.roundtrip.mt.gfa

@@ -59,13 +59,11 @@ struct GFAIDMapInfo : public NamedNodeBackTranslation {
 
 };
 
-/// Read a GFA or GFAZ file for a blunt-ended graph into a HandleGraph.
+/// Read a text GFA file for a blunt-ended graph into a HandleGraph.
 /// Give "-" as a filename for stdin.
 ///
-/// The format is automatically detected: GFAZ files are identified by their
-/// magic number. Throws GFAFormatError if the file is not acceptable, and
-/// std::ios_base::failure if an IO operation fails. Throws invalid_argument if
-/// otherwise misused.
+/// Throws GFAFormatError if the file is not acceptable, and
+/// std::ios_base::failure if an IO operation fails.
 /// Does not give max ID hints, and so might be very slow when loading into an ODGI graph.
 void gfa_to_handle_graph(const string& filename,
                          MutableHandleGraph* graph,
@@ -81,7 +79,18 @@ void gfa_to_handle_graph(istream& in,
                          MutableHandleGraph* graph,
                          GFAIDMapInfo* translation = nullptr);
 
-/// Same as gfa_to_handle_graph but also adds path elements from the GFA/GFAZ to the graph.
+/// Read a GFA-family file (text GFA or GFAZ) for a blunt-ended graph into a HandleGraph.
+/// The format is chosen from the file contents or filename as needed.
+void gfa_family_to_handle_graph(const string& filename,
+                                MutableHandleGraph* graph,
+                                GFAIDMapInfo* translation = nullptr);
+
+/// Overload which serializes its translation to a file internally.
+void gfa_family_to_handle_graph(const string& filename,
+                                MutableHandleGraph* graph,
+                                const string& translation_filename);
+
+/// Same as gfa_to_handle_graph but also adds path elements from the text GFA to the graph.
 void gfa_to_path_handle_graph(const string& filename,
                               MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation = nullptr,
@@ -101,6 +110,20 @@ void gfa_to_path_handle_graph(istream& in,
                               GFAIDMapInfo* translation = nullptr,
                               int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
                               unordered_set<PathSense>* ignore_sense = nullptr);
+
+/// Same as gfa_to_path_handle_graph but accepts either text GFA or GFAZ files.
+void gfa_family_to_path_handle_graph(const string& filename,
+                                     MutablePathMutableHandleGraph* graph,
+                                     GFAIDMapInfo* translation = nullptr,
+                                     int64_t max_rgfa_rank = numeric_limits<int64_t>::max(),
+                                     unordered_set<PathSense>* ignore_sense = nullptr);
+
+/// Overload which serializes its translation to a file internally.
+void gfa_family_to_path_handle_graph(const string& filename,
+                                     MutablePathMutableHandleGraph* graph,
+                                     int64_t max_rgfa_rank,
+                                     const string& translation_filename,
+                                     unordered_set<PathSense>* ignore_sense = nullptr);
 
 /**
  * Lower-level tools for parsing GFA elements.

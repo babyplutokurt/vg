@@ -69,7 +69,7 @@ static void write_gfa_translation(const GFAIDMapInfo& id_map_info, const string&
     }
 }
 
-static unique_ptr<GFAParser> make_parser_for_file(const string& filename) {
+static unique_ptr<GFAParser> make_gfa_family_parser_for_file(const string& filename) {
     if (filename != "-" && GFAzParser::looks_like_gfaz(filename)) {
         return make_unique<GFAzParser>();
     }
@@ -352,10 +352,10 @@ static void add_path_listeners(GFAParser& parser, MutablePathMutableHandleGraph*
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
                          GFAIDMapInfo* translation) {
-    auto parser = make_parser_for_file(filename);
-    attach_translation(*parser, translation);
-    parser_to_handle_graph(*parser, graph);
-    parser->parse(filename);
+    GFATextParser parser;
+    attach_translation(parser, translation);
+    parser_to_handle_graph(parser, graph);
+    parser.parse(filename);
 }
 
 void gfa_to_handle_graph(const string& filename, MutableHandleGraph* graph,
@@ -376,14 +376,29 @@ void gfa_to_handle_graph(istream& in, MutableHandleGraph* graph,
     parser.parse(in);
 }
 
+void gfa_family_to_handle_graph(const string& filename, MutableHandleGraph* graph,
+                                GFAIDMapInfo* translation) {
+    auto parser = make_gfa_family_parser_for_file(filename);
+    attach_translation(*parser, translation);
+    parser_to_handle_graph(*parser, graph);
+    parser->parse(filename);
+}
+
+void gfa_family_to_handle_graph(const string& filename, MutableHandleGraph* graph,
+                                const string& translation_filename) {
+
+    GFAIDMapInfo id_map_info;
+    gfa_family_to_handle_graph(filename, graph, &id_map_info);
+    write_gfa_translation(id_map_info, translation_filename);
+}
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
                               GFAIDMapInfo* translation, int64_t max_rgfa_rank,
                               unordered_set<PathSense>* ignore_sense) {
-    auto parser = make_parser_for_file(filename);
-    attach_translation(*parser, translation);
-    parser_to_path_handle_graph(*parser, graph, max_rgfa_rank, ignore_sense);
-    parser->parse(filename);
+    GFATextParser parser;
+    attach_translation(parser, translation);
+    parser_to_path_handle_graph(parser, graph, max_rgfa_rank, ignore_sense);
+    parser.parse(filename);
 }
 
 void gfa_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
@@ -406,6 +421,24 @@ void gfa_to_path_handle_graph(istream& in,
     attach_translation(parser, translation);
     parser_to_path_handle_graph(parser, graph, max_rgfa_rank, ignore_sense);
     parser.parse(in);
+}
+
+void gfa_family_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
+                                     GFAIDMapInfo* translation, int64_t max_rgfa_rank,
+                                     unordered_set<PathSense>* ignore_sense) {
+    auto parser = make_gfa_family_parser_for_file(filename);
+    attach_translation(*parser, translation);
+    parser_to_path_handle_graph(*parser, graph, max_rgfa_rank, ignore_sense);
+    parser->parse(filename);
+}
+
+void gfa_family_to_path_handle_graph(const string& filename, MutablePathMutableHandleGraph* graph,
+                                     int64_t max_rgfa_rank, const string& translation_filename,
+                                     unordered_set<PathSense>* ignore_sense) {
+
+    GFAIDMapInfo id_map_info;
+    gfa_family_to_path_handle_graph(filename, graph, &id_map_info, max_rgfa_rank, ignore_sense);
+    write_gfa_translation(id_map_info, translation_filename);
 }
 
 void parser_to_handle_graph(GFAParser& parser, MutableHandleGraph* graph) {
