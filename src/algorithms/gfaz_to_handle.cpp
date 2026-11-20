@@ -5,6 +5,7 @@
 #include <GFAz/core/codec/codec.hpp>
 #include <GFAz/core/codec/serialization.hpp>
 #include <GFAz/core/io/gfa_write_utils.hpp>
+#include <GFAz/core/model/segment_names.hpp>
 
 #include <gbwtgraph/utils.h>
 
@@ -33,6 +34,13 @@ struct StreamingGFAZPaths {
   string header_line;
   size_t node_count = 0;
   vector<size_t> node_lengths;
+  /// Graph node ID of each GFAz segment (segments are numbered from 1), when
+  /// the GFA's segment names are not just those numbers. Empty otherwise.
+  vector<nid_t> node_ids;
+
+  nid_t graph_id(size_t segment) const {
+    return node_ids.empty() ? static_cast<nid_t>(segment) : node_ids[segment];
+  }
   vector<OptionalFieldColumn> segment_optional_fields;
 
   LinkData links;
@@ -232,18 +240,19 @@ static GFAParser::tag_list_t collect_optional_tags_for_row(
   return tags;
 }
 
-static GFAParser::visit_iteratee_t make_gfaz_visit_iteratee(const vector<NodeId>& visits) {
-  return [visits](const GFAParser::visit_step_t& visit_step) {
+static GFAParser::visit_iteratee_t make_gfaz_visit_iteratee(const vector<NodeId>& visits,
+                                                            const StreamingGFAZPaths& gfaz_paths) {
+  return [visits, &gfaz_paths](const GFAParser::visit_step_t& visit_step) {
     if (visits.empty()) {
       visit_step(-1, 0, std::string_view(), false);
       return;
     }
-    // GFAz encodes node IDs numerically, so we hand them to the listener
-    // directly and skip the listener's name-based lookup.
+    // GFAz encodes segments numerically, so we hand their node IDs to the
+    // listener directly and skip the listener's name-based lookup.
     for (size_t i = 0; i < visits.size(); ++i) {
       NodeId visit = visits[i];
       bool is_reverse = visit < 0;
-      nid_t node_id = is_reverse ? -static_cast<nid_t>(visit) : static_cast<nid_t>(visit);
+      nid_t node_id = gfaz_paths.graph_id(is_reverse ? -visit : visit);
       if (!visit_step(i, node_id, std::string_view(), is_reverse)) {
         return;
       }
@@ -367,10 +376,23 @@ void GFAzParser::parse(const string& filename) {
 
     auto& map_info = this->id_map();
     map_info.numeric_mode = true;
-    map_info.direct_numeric_lookup = true;
-    map_info.max_id = gfaz_paths.node_count;
     map_info.name_to_id->clear();
     map_info.id_to_name.reset();
+    const gfaz::SegmentNames segment_names = gfaz::SegmentNames::decode(compressed);
+    if (segment_names.dense()) {
+      // Segments are named 1..N: the names are the IDs and need no map.
+      map_info.direct_numeric_lookup = true;
+      map_info.max_id = gfaz_paths.node_count;
+    } else {
+      // Assign IDs from the stored names exactly as a GFA would get them.
+      map_info.direct_numeric_lookup = false;
+      map_info.max_id = 0;
+      gfaz_paths.node_ids.resize(gfaz_paths.node_count + 1, 0);
+      for (size_t segment = 1; segment <= gfaz_paths.node_count; ++segment) {
+        gfaz_paths.node_ids[segment] =
+            GFAParser::assign_new_sequence_id(segment_names.name(segment), map_info);
+      }
+    }
 
     gfaz_paths.segment_optional_fields.reserve(compressed.segment_optional_fields_zstd.size());
     for (const auto& column : compressed.segment_optional_fields_zstd) {
@@ -388,7 +410,7 @@ void GFAzParser::parse(const string& filename) {
     vector<size_t> optional_byte_offsets(gfaz_paths.segment_optional_fields.size(), 0);
     size_t segment_seq_offset = 0;
     for (size_t i = 0; i < segment_lengths.size(); ++i) {
-      nid_t id = static_cast<nid_t>(i + 1);
+      nid_t id = gfaz_paths.graph_id(i + 1);
       uint32_t len = segment_lengths[i];
       if (segment_seq_offset + len > segment_sequences.size()) {
         throw runtime_error("GFAZ segment sequence column is truncated");
@@ -401,7 +423,7 @@ void GFAzParser::parse(const string& filename) {
       for (auto& listener : this->node_listeners) {
         listener(id, as_chars(sequence), tags);
       }
-      gfaz_paths.node_lengths[id] = len;
+      gfaz_paths.node_lengths[i + 1] = len;
       segment_seq_offset += len;
     }
   }
@@ -426,9 +448,9 @@ void GFAzParser::parse(const string& filename) {
                 gfaz_paths.links.overlap_ops[i];
     }
     for (auto& listener : this->edge_listeners) {
-      listener(gfaz_paths.links.from_ids[i],
+      listener(gfaz_paths.graph_id(gfaz_paths.links.from_ids[i]),
                i < gfaz_paths.links.from_orients.size() ? gfaz_paths.links.from_orients[i] == '-' : false,
-               gfaz_paths.links.to_ids[i],
+               gfaz_paths.graph_id(gfaz_paths.links.to_ids[i]),
                i < gfaz_paths.links.to_orients.size() ? gfaz_paths.links.to_orients[i] == '-' : false,
                as_chars(overlap),
                GFAParser::tag_list_t());
@@ -472,7 +494,7 @@ void GFAzParser::parse(const string& filename) {
         gfaz_paths.paths_flat, gfaz_paths.path_offsets,
         gfaz_paths.original_path_offsets, i, gfaz_paths.rules_first,
         gfaz_paths.rules_second, gfaz_paths.min_rule_id, compressed.delta_round);
-    auto visit_iteratee = make_gfaz_visit_iteratee(visits);
+    auto visit_iteratee = make_gfaz_visit_iteratee(visits, gfaz_paths);
     handle_duplicate_paths(*this, 'P', [&]() {
       for (auto& listener : this->path_listeners) {
         listener(gfaz_paths.path_names[i], visit_iteratee, GFAParser::tag_list_t());
@@ -486,7 +508,7 @@ void GFAzParser::parse(const string& filename) {
         gfaz_paths.walks_flat, gfaz_paths.walk_offsets,
         gfaz_paths.original_walk_offsets, i, gfaz_paths.rules_first,
         gfaz_paths.rules_second, gfaz_paths.min_rule_id, compressed.delta_round);
-    auto visit_iteratee = make_gfaz_visit_iteratee(visits);
+    auto visit_iteratee = make_gfaz_visit_iteratee(visits, gfaz_paths);
     string sample_name = i < gfaz_paths.walk_sample_ids.size() ? gfaz_paths.walk_sample_ids[i] : "*";
     int64_t haplotype = i < gfaz_paths.walk_hap_indices.size() ? gfaz_paths.walk_hap_indices[i] : 0;
     string contig_name = i < gfaz_paths.walk_seq_ids.size() ? gfaz_paths.walk_seq_ids[i] : PathMetadata::NO_LOCUS_NAME;
@@ -511,7 +533,7 @@ void GFAzParser::parse(const string& filename) {
                        [&](nid_t id, int64_t offset, size_t length, const string& path_name, int64_t path_rank) {
                          handle_duplicate_paths(*this, 'S', [&]() {
                            for (auto& listener : this->rgfa_listeners) {
-                             listener(id, offset, length, path_name, path_rank);
+                             listener(gfaz_paths.graph_id(id), offset, length, path_name, path_rank);
                            }
                          });
                        });
