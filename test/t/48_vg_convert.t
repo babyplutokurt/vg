@@ -7,7 +7,7 @@ PATH=../bin:$PATH # for vg
 
 export LC_ALL="C" # force a consistent sort order
 
-plan tests 97
+plan tests 98
 
 vg construct -r complex/c.fa -v complex/c.vcf.gz > c.vg
 cat <(vg view c.vg | grep ^S | sort) <(vg view c.vg | grep L | uniq | wc -l) <(vg paths -v c.vg -E) > c.info
@@ -416,6 +416,8 @@ vg convert -g gfaz_names/named.gfaz -T named.gfaz.trans -p > /dev/null
 vg convert -g gfaz_names/named.gfa -T named.gfa.trans -p > /dev/null
 diff named.gfaz.trans named.gfa.trans
 is $? 0 "GFAZ import writes the same segment name translation as GFA import"
+diff <(vg convert -f gfaz_names/padded.gfaz | sort) <(vg convert -f gfaz_names/padded.gfa | sort)
+is $? 0 "GFAZ read in place keeps zero-padded segment names with a suffix"
 is "$(vg stats -r gfaz_names/sparse.gfaz)" "$(vg stats -r gfaz_names/sparse.gfa)" "GFAZ read in place uses numeric segment names as node IDs"
 is "$(VG_GFAZ_CONVERT=1 vg stats -r gfaz_names/sparse.gfaz)" "$(vg stats -r gfaz_names/sparse.gfa)" "converted GFAZ uses numeric segment names as node IDs"
 rm -f named.gfaz.trans named.gfa.trans
